@@ -1,0 +1,16 @@
+latest: Pulling from stilleshan/frpc
+486039affc0a: Pulling fs layer
+e41cb6737d7e: Pulling fs layer
+bbdcc57685ec: Pulling fs layer
+e41cb6737d7e: Verifying Checksum
+e41cb6737d7e: Download complete
+486039affc0a: Verifying Checksum
+486039affc0a: Download complete
+bbdcc57685ec: Verifying Checksum
+bbdcc57685ec: Download complete
+486039affc0a: Pull complete
+e41cb6737d7e: Pull complete
+bbdcc57685ec: Pull complete
+Digest: sha256:1a492ba2decaf124fbed171997eec249624b0e77fa16ab4ca652383186149b78
+Status: Downloaded newer image for stilleshan/frpc:latest
+docker.io/stilleshan/frpc:latest
