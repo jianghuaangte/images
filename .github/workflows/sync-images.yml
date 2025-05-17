@@ -1,0 +1,91 @@
+name: Sync Docker Images
+
+on:
+  schedule:
+    - cron: '15 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Git LFS
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git-lfs
+        git lfs install
+
+    - name: Docker Login (optional)
+      if: false  # 如果需要登录私有仓库，设为 true 并配置 secrets
+      run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: 同步 Docker 镜像
+      id: sync_docker
+      run: |
+        set -e
+        # 这里配置你的镜像
+        IMAGE_CONFIG=(
+          "cloudnas/clouddrive2:latest:docker-images/clouddrive2"
+          "stilleshan/frpc:latest:docker-images/frpc"
+        )
+
+        needs_commit=false
+
+        for config in "${IMAGE_CONFIG[@]}"; do
+          IFS=':' read -r IMAGE TAG TARGET_DIR <<< "$config"
+          IMAGE_FULL="$IMAGE:$TAG"
+          SAFE_NAME="${IMAGE//\//_}__$TAG"
+          TAG_FILE="$TARGET_DIR/latest.tag"
+
+          mkdir -p "$TARGET_DIR"
+
+          echo "🔄 正在拉取镜像: $IMAGE_FULL"
+          docker pull "$IMAGE_FULL" > docker_pull.log 2>&1
+
+          # 获取镜像 ID
+          NEW_IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE_FULL")
+          CURRENT_ID=$(cat "$TAG_FILE" 2>/dev/null || echo "")
+
+          if [[ "$NEW_IMAGE_ID" == "$CURRENT_ID" ]]; then
+            echo "✅ 镜像未变更: $IMAGE_FULL"
+            continue
+          fi
+
+          echo "🆕 镜像有更新，准备导出: $IMAGE_FULL"
+
+          # 清空旧文件并导出新 tar 文件
+          rm -rf "${TARGET_DIR:?}/"*
+          TAR_FILE="$TARGET_DIR/image.tar"
+          docker save "$IMAGE_FULL" -o "$TAR_FILE"
+
+          echo "$NEW_IMAGE_ID" > "$TAG_FILE"
+          needs_commit=true
+
+          echo "✔️ 导出完成: $TAR_FILE"
+        done
+
+        echo "needs_commit=$needs_commit" >> $GITHUB_OUTPUT
+
+    - name: Commit and Push Changes
+      if: steps.sync_docker.outputs.needs_commit == 'true'
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+        git add -A
+        if [ -n "$(git status --porcelain)" ]; then
+          git commit -m "chore: 更新 Docker 镜像 tar 包 [skip ci]"
+          git push origin main
+          echo "🚀 变更已提交"
+        else
+          echo "🔄 无需提交"
+        fi
